@@ -41,14 +41,27 @@ var makePool = function (mailUrlString) {
   return pool;
 };
 
-var getPool = _.once(function () {
+var getPool = function () {
+  if (getPool.poolChanged) {
+    delete this.pool;
+    this.poolChanged = false;
+  }
+
+  if (this.pool)
+    return this.pool;
+
   // We delay this check until the first call to Email.send, in case someone
   // set process.env.MAIL_URL in startup code.
   var url = process.env.MAIL_URL;
-  if (! url)
-    return null;
-  return makePool(url);
-});
+  if (url) {
+    this.pool = makePool(url);
+  } else {
+    this.pool = null;
+  }
+
+
+  return this.pool;
+};
 
 var next_devmode_mail_id = 0;
 var output_stream = process.stdout;
@@ -96,6 +109,43 @@ var smtpSend = function (pool, mc) {
 var sendHooks = [];
 EmailTest.hookSend = function (f) {
   sendHooks.push(f);
+};
+
+EmailTest.makePool = function () {
+  if (this.pool)
+    delete this.pool;
+
+  var url = process.env.MAIL_URL;
+  if (url) {
+    this.pool = makePool(url);
+  } else {
+    this.pool = null;
+  }
+};
+
+/**
+*
+*/
+var getDefaultMailURL = _.once(function (value) {
+  return value;
+});
+Email.setMailURL = function (newMailURL) {
+  getDefaultMailURL(process.env.MAIL_URL);
+
+  if (newMailURL && !_.isString(newMailURL))
+    throw new Error('MAIL_URL should be a string');
+
+  var before = process.env.MAIL_URL;
+
+  if (newMailURL)
+    process.env.MAIL_URL = newMailURL;
+  else if (!getDefaultMailURL())
+    delete process.env.MAIL_URL;
+  else
+    process.env.MAIL_URL = getDefaultMailURL();
+
+  if (before !== process.env.MAIL_URL)
+    getPool.poolChanged = true;
 };
 
 // Old comment below

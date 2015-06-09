@@ -56,3 +56,57 @@ Tinytest.add("email - dev mode smoke test", function (test) {
     EmailTest.restoreOutputStream();
   }
 });
+
+var emailParams = {
+  from: "a@b.com",
+  text: "body"
+};
+
+Tinytest.add("email - setMailURL dev mod smokey test", function (test) {
+  try {
+    var stream = new streamBuffers.WritableStreamBuffer;
+    EmailTest.overrideOutputStream(stream);
+
+    // Test MAIL_URL overriding
+    Email.setMailURL('smtp://user:pass!@smtp.domain.com:465');
+    try {
+      Email.send(emailParams);
+    } catch (e) {
+      test.equal(e.message,
+                  'Invalid login - 535 Incorrect authentication data');
+    }
+    // Test default MAIL_URL restoration if falsey argument passed
+    Email.setMailURL(false);
+    Email.send(emailParams);
+    test.equal(stream.getContentsAsString("utf8"),
+               "====== BEGIN MAIL #0 ======\n" +
+               "(Mail not sent; to enable sending, set the MAIL_URL " +
+                 "environment variable.)\n" +
+               "MIME-Version: 1.0\r\n" +
+               "From: a@b.com\r\n" +
+               "Content-Type: text/plain; charset=utf-8\r\n" +
+               "Content-Transfer-Encoding: quoted-printable\r\n" +
+               "\r\n" +
+               "body\r\n" +
+               "====== END MAIL #0 ======\n");
+  } finally {
+    EmailTest.restoreOutputStream();
+  }
+});
+
+Tinytest.add("email - setMailURL memory usage test", function (test) {
+
+  var heapUsedBefore = process.memoryUsage().heapUsed;
+
+  var cycleTimes = 1000;
+
+  for (var i = 0; i < cycleTimes; i++) {
+    Email.setMailURL(i % 2 ? false : 'smtp://user:pass!@smtp.domain.com:465');
+    EmailTest.makePool();
+  }
+
+  test.isTrue(heapUsedBefore > process.memoryUsage().heapUsed / 1.5,
+               "process.memoryUsage().heapUsed is 1.5 times " +
+               "higher after " + cycleTimes + " makePool recreation " +
+               "attempts. Is there some sort of memory leak?");
+});
